@@ -4,56 +4,47 @@ session_start(); // Start the session
 
 // Check if user is logged in AND is an Admin, otherwise redirect
 if (!isset($_SESSION['user_type']) || $_SESSION['user_type'] !== 'Admin') {
-    // Redirect to rolePage.php or a specific unauthorized access page
     header("Location: rolePage.php");
     exit();
 }
 
 // Get user information from session
-$user_type = $_SESSION['user_type']; // Should be "Admin"
+$user_type = $_SESSION['user_type'];
 $user_id = $_SESSION['user_id'];
 
 // Get current year for copyright footer
 $current_year = date("Y");
 
-// Include your database connection file to fetch programs for the dropdown
-require 'db.php'; // Adjust the path if necessary
+// Include your database connection file to fetch programs for the dropdown and alumni count
+require 'db.php';
 
 // --- PHP Logic for Fetching Programs for the Dropdown ---
-$programs_list = []; // Initialize an empty array
-
-// SQL query to get distinct college and course combinations from the single column
-// Selects the existing 'college_and_course' column
+$programs_list = [];
 $sql_programs = "SELECT DISTINCT college_and_course FROM alumni ORDER BY college_and_course";
 $result_programs = $conn->query($sql_programs);
 
 if ($result_programs === false) {
     error_log("Error fetching programs for dropdown: " . $conn->error);
-    // Handle error if necessary, maybe add a default option indicating error
-    $programs_list[] = "Error fetching programs"; // Add an error option
+    $programs_list[] = "Error fetching programs";
 } else {
     if ($result_programs->num_rows > 0) {
         while($row_programs = $result_programs->fetch_assoc()) {
-            // Use the value directly from the 'college_and_course' column
-            // Only add non-empty values to the list
             if (!empty($row_programs['college_and_course'])) {
                  $programs_list[] = htmlspecialchars($row_programs['college_and_course']);
             }
         }
     }
-    // If no rows, $programs_list will be an empty array, which is fine.
-
-    $result_programs->free(); // Free result set
+    $result_programs->free();
 }
 
-// Close the database connection after fetching programs
-// The connection will be reopened in fetchAlumniADMIN.php and fetch_incomplete_alumni.php
+// --- PHP Logic for Alumni Counter ---
+$sql_count = "SELECT COUNT(*) AS total FROM alumni";
+$result_count = $conn->query($sql_count);
+$total_alumni = 0;
+if ($result_count && $row = $result_count->fetch_assoc()) {
+    $total_alumni = $row['total'];
+}
 $conn->close();
-// --- End PHP Logic for Fetching Programs ---
-
-// Note: Data fetching for the main table is handled by fetchAlumniADMIN.php via AJAX.
-// Data fetching for the incomplete table is handled by fetch_incomplete_alumni.php via AJAX.
-
 ?>
 <!DOCTYPE html>
 <html>
@@ -266,6 +257,13 @@ $conn->close();
             box-sizing: border-box;
         }
 
+        .alumni-counter {
+            text-align: center;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            color: #337ab7;
+            font-weight: bold;
+        }
 
         /* --- Table Styles --- */
         .alumni-table {
@@ -400,43 +398,26 @@ $conn->close();
                 <option value="">All Status</option>
                 <option value="Employed">Employed</option>
                 <option value="Unemployed">Unemployed</option>
-                 </select>
+            </select>
 
             <select id="programFilter">
                 <option value="">All Programs</option>
-                <?php
-                // Include your database connection file here to fetch programs
-                require 'db.php'; // Adjust the path if necessary
-
-                $sql_programs = "SELECT DISTINCT college_and_course FROM alumni ORDER BY college_and_course";
-                $result_programs = $conn->query($sql_programs);
-
-                if ($result_programs === false) {
-                    error_log("Error fetching programs for dropdown: " . $conn->error);
-                    // Optionally add an error option to the dropdown
-                    echo '<option value="">Error loading programs</option>';
-                } else {
-                    if ($result_programs->num_rows > 0) {
-                        while($row_programs = $result_programs->fetch_assoc()) {
-                            // Use the value directly from the 'college_and_course' column
-                            if (!empty($row_programs['college_and_course'])) {
-                                echo '<option value="' . htmlspecialchars($row_programs['college_and_course']) . '">' . htmlspecialchars($row_programs['college_and_course']) . '</option>';
-                            }
-                        }
-                    }
-                    $result_programs->free();
-                }
-
-                $conn->close();
-                ?>
+                <?php foreach ($programs_list as $program): ?>
+                    <option value="<?php echo $program; ?>"><?php echo $program; ?></option>
+                <?php endforeach; ?>
             </select>
 
             <input type="text" id="yearFilter" placeholder="Search Year (Ex: 2020)">
             <input type="text" id="thesisGroupIdFilter" placeholder="Search Thesis Group ID">
         </div>
+
+        <!-- Alumni Counter Below Search Bar -->
+        <div class="alumni-counter">
+            Total Alumni Records: <strong><?php echo $total_alumni; ?></strong>
+        </div>
+
         <div class="results-area">
              <h3>Search Results</h3>
-
              <table class="alumni-table">
                  <thead>
                      <tr>
@@ -461,7 +442,6 @@ $conn->close();
         </div>
         <div class="incomplete-results-area">
              <h3>Incomplete Records</h3>
-
              <table class="incomplete-table">
                  <thead>
                      <tr>
@@ -484,7 +464,7 @@ $conn->close();
                  </tbody>
              </table>
         </div>
-        </div>
+    </div>
 
     <div class="user-status-box">
         Connected as: <?php echo htmlspecialchars($user_type); ?> / <?php echo htmlspecialchars($user_id); ?>
